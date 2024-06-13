@@ -6,27 +6,23 @@ https://github.com/luchris429/purejaxrl/blob/main/purejaxrl/ppo.py
 import jax.experimental
 from poclaps import environments
 from poclaps.train.training_cb import TrainerCallback
-from .wandb_cb import wandb_try_login
 from .wandb_cb import WandbCallback
-
-import wandb
 
 import jax
 import jax.numpy as jnp
-import flax.linen as nn
 import numpy as np
 import optax
 import chex
-from flax import struct
+import distrax
 from gymnax.environments import environment
 from gymnax.environments import spaces
+import flax.linen as nn
+from flax import struct
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
-import distrax
 
 import functools
 from typing import Sequence, NamedTuple, Dict, Optional, Tuple, Union, Any
-
 
 
 class GymnaxWrapper(object):
