@@ -1,22 +1,25 @@
-ALGORITHM: "PPO"
-LR: 2.5e-4
-NUM_ENVS: 4
-NUM_STEPS: 128
-TOTAL_TIMESTEPS: 1e5
-UPDATE_EPOCHS: 4
-NUM_MINIBATCHES: 4
-GAMMA: 0.99
-GAE_LAMBDA: 0.95
-CLIP_EPS: 0.2
-ENT_COEF: 0.01
-VF_COEF: 0.5
-MAX_GRAD_NORM: 0.5
-ACTIVATION: "tanh"
-ANNEAL_LR: True
+algorithm: "PPO"
+learning_rate: 2.5e-4
+num_envs: 4
+num_steps: 128
+total_timesteps: 1e5
+update_epochs: 4
+num_minibatches: 4
+gamma: 0.99
+gae_lambda: 0.95
+clip_eps: 0.2
+ent_coef: 0.01
+vf_coef: 0.5
+max_grad_norm: 0.5
+activation: "tanh"
+anneal_lr: True
+seed: 0
 
-ENV_NAME: "SimpleGridWorld-v0"
+env_name: "SimpleGridWorld-v0"
+env_kwargs:
+  grid_size: 5
+  max_steps_in_episode: 20
 
-DEBUG: False
-ENTITY: "drcope"
-PROJECT: "ppo-gridworld-example"
-WANDB_MODE: "online"
+wandb_entity: "drcope"
+wandb_project: "ppo-gridworld-example"
+wandb_mode: "online"

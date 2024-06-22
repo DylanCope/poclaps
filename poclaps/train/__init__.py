@@ -7,14 +7,14 @@ from poclaps.train.ckpt_cb import CheckpointerCallback
 
 def create_ppo_trainer(config: dict) -> callable:
 
-    output_dir = config['OUTPUT_DIR']
+    output_dir = config['output_dir']
     cb = ChainedCallback(
-        WandbCallback(tags=[config['ALGORITHM'], "RNN", config["ENV_NAME"]]),
+        WandbCallback(tags=[config['algorithm'], "RNN", config["env_name"]]),
         CheckpointerCallback(
             output_dir / 'checkpoints',
-            max_to_keep=config.get('KEEP_CHECKPOINTS', 1),
-            save_interval_steps=config.get('CHECKPOINT_INTERVAL', 200),
-            only_save_last=config.get('ONLY_SAVE_LAST', True),
+            max_to_keep=config.get('keep_checkpoints', 1),
+            save_interval_steps=config.get('checkpoint_interval', 200),
+            only_save_last=config.get('only_save_last', True),
         ),
         MetricsLogger(output_dir)
     )

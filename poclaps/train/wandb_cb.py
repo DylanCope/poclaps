@@ -22,11 +22,11 @@ class WandbCallback(TrainerCallback):
         wandb_try_login()
 
         wandb.init(
-            entity=self.config["ENTITY"],
-            project=self.config["PROJECT"],
+            entity=self.config["wandb_entity"],
+            project=self.config["wandb_project"],
             tags=self.tags,
             config=self.config,
-            mode=self.config["WANDB_MODE"],
+            mode=self.config["wandb_mode"],
         )
 
     def on_train_end(self, *_):

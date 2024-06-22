@@ -13,9 +13,9 @@ def main(config):
     config = OmegaConf.to_container(config)
     print('Config:\n', json.dumps(config, indent=4))
 
-    config['OUTPUT_DIR'] = get_current_hydra_output_dir()
+    config['output_dir'] = get_current_hydra_output_dir()
 
-    algorithm = config.get('ALGORITHM', 'PPO')
+    algorithm = config.get('algorithm', 'PPO')
     if algorithm == 'PPO':
         train = create_ppo_trainer(config)
     else:

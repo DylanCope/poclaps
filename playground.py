@@ -1,4 +1,4 @@
-from typing import NamedTuple
+from typing import Iterable, NamedTuple
 from poclaps.train.ckpt_cb import load_ckpt
 from poclaps.train.ppo import make_train as make_ppo_train
 from poclaps.train.ppo import FlattenObservationWrapper, LogWrapper
@@ -7,27 +7,43 @@ from poclaps import environments
 from pathlib import Path
 import yaml
 
+from poclaps.train.training_cb import TrainerCallback
 
-run_dir = Path('outputs/2024-06-11/19-46-55')
+
+# run_dir = Path('outputs/2024-06-11/19-46-55')
+run_dir = Path('outputs/2024-06-14/15-39-35/')
+run_dir2 = Path('outputs/2024-06-15/00-58-28/')
 
 
-with open(f'{run_dir}/.hydra/config.yaml') as f:
-    config = yaml.safe_load(f)
-    config['OUTPUT_DIR'] = run_dir
+def load_config(run_dir):
+    with open(f'{run_dir}/.hydra/config.yaml') as f:
+        config = yaml.safe_load(f)
+        config['output_dir'] = run_dir
+    return config
+
+config = load_config(run_dir)
+config2 = load_config(run_dir2)
 
 init_state, train_fn = make_ppo_train(config)
 
 print(config)
 
-ckpt = load_ckpt(run_dir / 'checkpoints', 195, init_state)
-train_state, *_ = ckpt
+def load_pretrained_policy(run_dir, config, ckpt_step=195):
+    init_state, _ = make_ppo_train(config)
+    ckpt = load_ckpt(run_dir / 'checkpoints', ckpt_step, init_state)
+    train_state, *_ = ckpt
 
-def pretrained_policy(obs):
-    return train_state.apply_fn(train_state.params, obs)
+    def pretrained_policy(obs):
+        return train_state.apply_fn(train_state.params, obs)
 
+    return pretrained_policy
+
+pretrained_policy = load_pretrained_policy(run_dir, config)
+pretrained_policy2 = load_pretrained_policy(run_dir2, config2)
 print('Loaded policy checkpoint.')
 
-env, env_params = environments.make(config["ENV_NAME"])
+env, env_params = environments.make(config["env_name"],
+                                    **config.get('env_kwargs', {}))
 env = FlattenObservationWrapper(env)
 env = LogWrapper(env)
 
@@ -46,12 +62,14 @@ class Transition(NamedTuple):
     log_prob: Array
     obs: Array
     info: dict
+    episode_id: int
 
 
 def rollout(env, policy, steps, n_envs=4, seed=0, rollout_state=None):
 
+    @jax.jit
     def _env_step(rollout_state, _):
-        env_state, last_obs, rng = rollout_state
+        env_state, last_obs, rng, ep_ids = rollout_state
 
         # SELECT ACTION
         rng, _rng = jax.random.split(rng)
@@ -65,10 +83,11 @@ def rollout(env, policy, steps, n_envs=4, seed=0, rollout_state=None):
         obsv, env_state, reward, done, info = jax.vmap(
             env.step, in_axes=(0, 0, 0, None)
         )(rng_step, env_state, action, env_params)
+        ep_ids = jnp.where(done, ep_ids + n_envs, ep_ids)
         transition = Transition(
-            env_state, done, action, reward, log_prob, last_obs, info
+            env_state, done, action, reward, log_prob, last_obs, info, ep_ids
         )
-        rollout_state = (env_state, obsv, rng)
+        rollout_state = (env_state, obsv, rng, ep_ids)
         return rollout_state, transition
 
     if rollout_state is None:
@@ -77,7 +96,8 @@ def rollout(env, policy, steps, n_envs=4, seed=0, rollout_state=None):
         reset_rng = jax.random.split(_rng, n_envs)
         obsv, env_state = jax.vmap(env.reset,
                                    in_axes=(0, None))(reset_rng, env_params)
-        rollout_state = (env_state, obsv, rng)
+        ep_ids = jnp.arange(n_envs)
+        rollout_state = (env_state, obsv, rng, ep_ids)
 
     rollout_state, traj_batch = jax.lax.scan(
         _env_step, rollout_state, None, steps
@@ -100,10 +120,13 @@ def rollout(env, policy, steps, n_envs=4, seed=0, rollout_state=None):
     return rollout_state, traj_batch, metrics
 
 
+jit_rollout = jax.jit(rollout)
 rollout_state, traj_batch, metrics = rollout(env, pretrained_policy, 500)
 
 print(metrics)
 print(traj_batch.action.shape)
+
+print(traj_batch.episode_id)
 
 import numpy as np
 from poclaps.simple_gridworld_game import (
@@ -129,8 +152,78 @@ class SimpleGridWorldCommPolicy:
         pos_idx = goal_pos[0] * self.env_params.grid_size + goal_pos[1]
         return self.msg_map[int(pos_idx.item())]
 
-
 comm_policy = SimpleGridWorldCommPolicy(0, env_params)
+mapping = jnp.array(list(comm_policy.msg_map.values()))
+
+goal_pos_batch = traj_batch.env_state.env_state.goal_pos
+goal_idxs = goal_pos_batch[:, :, 0] * env_params.grid_size + goal_pos_batch[:, :, 1]
+
+msgs_batch = mapping[goal_idxs]
+
+import flax.linen as nn
+import jax
+import functools
+
+
+class ScannedRNN(nn.Module):
+    hidden_size: int = 128
+    # def __init__(self, hidden_dim=128):
+    #     super().__init__()
+    #     self.hidden_dim = hidden_dim
+
+    # @functools.partial(
+    #     nn.scan,
+    #     variable_broadcast="params",
+    #     in_axes=0,
+    #     out_axes=0,
+    #     split_rngs={"params": False},
+    # )
+    @nn.compact
+    def __call__(self, carry, x):
+        """Applies the module."""
+        rnn_state_c, rnn_state_h = carry
+        ins, resets = x
+        init_states_c, init_states_h = self.initialize_carry(ins.shape)
+        rnn_state_c = jnp.where(resets[:, :, np.newaxis], init_states_c, rnn_state_c)
+        rnn_state_h = jnp.where(resets[:, :, np.newaxis], init_states_h, rnn_state_h)
+        rnn_state = (rnn_state_c, rnn_state_h)
+        new_carry, y = nn.OptimizedLSTMCell(self.hidden_size)(rnn_state, x)
+        return new_carry, y
+
+    def initialize_carry(self, input_shape):
+        return nn.OptimizedLSTMCell(self.hidden_size, parent=None).initialize_carry(
+            jax.random.key(0), input_shape
+        )
+
+    # def initialize_carry(self, input_shape):
+    #     # Use a dummy key since the default state init fn is just zeros.
+    #     return nn.GRUCell(128).initialize_carry(
+    #         jax.random.PRNGKey(0), input_shape
+    #     )
+
+forward_rrn = ScannedRNN()
+
+N_ACTIONS = 5
+actions_1h = jax.nn.one_hot(traj_batch.action, N_ACTIONS)
+msgs_1h = jax.nn.one_hot(msgs_batch, comm_policy.n_msgs)
+feats = jnp.concatenate([actions_1h, msgs_1h], axis=-1)
+
+carry = forward_rrn.initialize_carry(feats.shape)
+
+print(feats.shape)
+
+model_inputs = (feats, traj_batch.done)
+
+print(traj_batch.done)
+
+variables = forward_rrn.init(jax.random.PRNGKey(0), carry, model_inputs)
+
+_, forward_embs = forward_rrn.apply(variables, carry, model_inputs)
+
+print(forward_embs.shape)
+
+import sys
+sys.exit()
 
 sequences = []
 n_steps, n_envs = traj_batch.action.shape
@@ -179,98 +272,70 @@ padding_mask = np.array(padding_mask)
 
 print(padded_obs.shape, padded_actions.shape, padded_msgs.shape, padding_mask.shape)
 
-import jax
-from flax import linen as nn
-import jax.numpy as jnp
-from chex import Array
-
-
-@jax.vmap
-def flip_sequences(inputs: Array, lengths: Array) -> Array:
-    max_length = inputs.shape[0]
-    return jnp.flip(jnp.roll(inputs, max_length - lengths, axis=0), axis=0)
-
-
-class SimpleBiLSTM(nn.Module):
-  """A simple bidirectional LSTM."""
-
-  hidden_size: int
-  out_size: int
-
-  @nn.compact
-  def __call__(self, carries, x, seq_lens):
-    forward_carry, backward_carry = carries
-    new_fcarry, foward_embs = nn.OptimizedLSTMCell(self.hidden_size)(forward_carry, x)
-    flipped_x = flip_sequences(x, seq_lens)
-    new_bcarry, backward_embs = nn.OptimizedLSTMCell(self.hidden_size)(backward_carry, flipped_x)
-
-    embs = jnp.concatenate([foward_embs, flip_sequences(backward_embs, seq_lens)], axis=-1)
-    new_carry = (new_fcarry, new_bcarry)
-
-    outs = nn.Dense(self.out_size)(embs)
-
-    return new_carry, outs
-
-  def initialize_carry(self, input_shape):
-    # Use fixed random key since default state init fn is just zeros.
-    carry = nn.OptimizedLSTMCell(self.hidden_size, parent=None).initialize_carry(
-        jax.random.key(0), input_shape
-    )
-    return (carry, carry)
-
-
 N_ACTIONS = 5
 obs_size = padded_obs.shape[-1]
+
+from poclaps.models.bi_lstm import SimpleBiLSTM
 
 obs_model = SimpleBiLSTM(128, obs_size)
 # cell = nn.OptimizedLSTMCell(128)
 actions_1h = jax.nn.one_hot(padded_actions, N_ACTIONS)
 msgs_1h = jax.nn.one_hot(padded_msgs, comm_policy.n_msgs)
-model_inps = jnp.concatenate([actions_1h, msgs_1h], axis=-1)
+feats = jnp.concatenate([actions_1h, msgs_1h], axis=-1)
 seq_lens = padding_mask.sum(axis=-1)
-carry = obs_model.initialize_carry(model_inps.shape)
-
-variables = obs_model.init(jax.random.PRNGKey(0), carry, model_inps, seq_lens)
-
-from poclaps.train.losses import categorical_cross_entropy
-
-
-def compute_loss(variables, model_inps, actions, seq_lens):
-    carry = obs_model.initialize_carry(model_inps.shape)
-    _, obs_preds = obs_model.apply(variables, carry, model_inps, seq_lens)
-    pred_action_dist, _ = pretrained_policy(obs_preds)
-    loss = categorical_cross_entropy(pred_action_dist.logits, actions)
-    return (loss.sum(axis=-1) / seq_lens).mean()
-
-
-new_carry, obs_preds = obs_model.apply(variables, carry, model_inps, seq_lens)
+carry = obs_model.initialize_carry(feats.shape)
+variables = obs_model.init(jax.random.PRNGKey(0), carry, feats, seq_lens)
 
 import optax
-
 optimizer = optax.adam(1e-3)
 opt_state = optimizer.init(variables)
 
+obs_model_train_state = TrainState(
+    params=variables,
+    optimizer=optimizer,
+    opt_state=opt_state
+)
 
-for i in range(2):
-    loss, grads = jax.value_and_grad(compute_loss)(variables, model_inps, actions_1h, seq_lens)
-    updates, opt_state = optimizer.update(grads, opt_state)
-    variables = optax.apply_updates(variables, updates)
-    if i % 5 == 0:
-        print('Iteration:', i, '- Loss:', loss.item())
+
+final_train_state = run_training(
+    train_state=obs_model_train_state,
+    n_steps=200,
+    data=[(feats, actions_1h, seq_lens)],
+    loss_fn=compute_loss,
+    callback=LoggerCallback(5)
+)
+
+# new_carry, obs_preds = obs_model.apply(variables, carry, model_inps, seq_lens)
+
+# import optax
+
+# for i in range(200):
+#     loss, grads = jax.value_and_grad(compute_loss)(variables, model_inps, actions_1h, seq_lens)
+#     updates, opt_state = optimizer.update(grads, opt_state)
+#     variables = optax.apply_updates(variables, updates)
+#     if i % 5 == 0:
+#         print('Iteration:', i, '- Loss:', loss.item())
 
 
 from poclaps.simple_gridworld_game import print_grid
 
-carry = obs_model.initialize_carry(model_inps.shape)
-_, obs_preds = obs_model.apply(variables, carry, model_inps, seq_lens)
+variables = final_train_state.params
 
-print(env_params.grid_size * padded_obs[:2, :])
-print(env_params.grid_size * obs_preds[:2, :])
+carry = obs_model.initialize_carry(feats.shape)
+_, obs_preds = obs_model.apply(variables, carry, feats, seq_lens)
 
 seq_mask = jnp.array(padding_mask, bool)
-print(padded_obs[seq_mask][:2, :])
-print(obs_preds[seq_mask][:2, :])
+print(padded_obs[:2][seq_mask[:2]])
+print(obs_preds[:2][seq_mask[:2]])
 
 pred_action_dist, _ = pretrained_policy(obs_preds)
-print(pred_action_dist.probs[seq_mask][:2].argmax(axis=-1))
-print(padded_actions[seq_mask][:2])
+print(pred_action_dist.probs[:5][seq_mask[:5]].argmax(axis=-1))
+print(padded_actions[:5][seq_mask[:5]])
+print(seq_lens[:5])
+
+print()
+
+
+pred_action_dist, _ = pretrained_policy2(obs_preds)
+print(pred_action_dist.probs[:5][seq_mask[:5]].argmax(axis=-1))
+print(padded_actions[:5][seq_mask[:5]])

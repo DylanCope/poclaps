@@ -35,24 +35,6 @@ class EnvParams(environment.EnvParams):
     max_steps_in_episode: int = 20
 
 
-def observation_fn(params: EnvParams, env_state: EnvState) -> jnp.ndarray:
-    # agent_pos_x_1h = jax.nn.one_hot(env_state.agent_pos[X], 5).flatten()
-    # agent_pos_y_1h = jax.nn.one_hot(env_state.agent_pos[Y], 5).flatten()
-    # goal_pos_x_1h = jax.nn.one_hot(env_state.goal_pos[X], 5).flatten()
-    # goal_pos_y_1h = jax.nn.one_hot(env_state.goal_pos[Y], 5).flatten()
-
-    # return jnp.concatenate([
-    #     agent_pos_x_1h,
-    #     agent_pos_y_1h,
-    #     goal_pos_x_1h,
-    #     goal_pos_y_1h
-    # ], dtype=jnp.float32)
-    return jnp.array([
-        env_state.agent_pos / params.grid_size,
-        env_state.goal_pos / params.grid_size,
-    ], dtype=jnp.float32)
-
-
 class GridAction:
     NOOP = 0
     UP = 1
@@ -72,25 +54,45 @@ Y = 1
 
 class SimpleGridWorldGame(environment.Environment):
 
-    def __init__(self):
+    def __init__(self, grid_size: int, max_steps_in_episode: int):
         super().__init__()
+        self.grid_size = grid_size
+        self.max_steps_in_episode = max_steps_in_episode
 
     @property
     def default_params(self) -> EnvParams:
-        return EnvParams()
+        return EnvParams(
+            grid_size=self.grid_size,
+            max_steps_in_episode=self.max_steps_in_episode
+        )
 
     def reset_env(
         self, key: chex.PRNGKey, params: EnvParams
     ) -> Tuple[chex.Array, EnvState]:
         k1, k2 = jax.random.split(key)
-        goal_pos = jax.random.randint(k1, (2,), 0, params.grid_size)
-        agent_pos = jax.random.randint(k2, (2,), 0, params.grid_size)
+        goal_pos = jax.random.randint(k1, (2,), 0, self.grid_size)
+        agent_pos = jax.random.randint(k2, (2,), 0, self.grid_size)
         env_state = EnvState(goal_pos, agent_pos)
-        return observation_fn(params, env_state), env_state
+        return self.get_obs(env_state), env_state
 
     def get_obs(self, state: EnvState, params=None, key=None) -> chex.Array:
         """Applies observation function to state."""
-        return observation_fn(params or self.default_params, state)
+        agent_pos_x_1h = jax.nn.one_hot(state.agent_pos[X], self.grid_size).flatten()
+        agent_pos_y_1h = jax.nn.one_hot(state.agent_pos[Y], self.grid_size).flatten()
+        goal_pos_x_1h = jax.nn.one_hot(state.goal_pos[X], self.grid_size).flatten()
+        goal_pos_y_1h = jax.nn.one_hot(state.goal_pos[Y], self.grid_size).flatten()
+
+        return jnp.concatenate([
+            agent_pos_x_1h,
+            agent_pos_y_1h,
+            goal_pos_x_1h,
+            goal_pos_y_1h
+        ], dtype=jnp.float32)
+        # return jnp.array([
+        #     env_state.agent_pos / params.grid_size,
+        #     env_state.goal_pos / params.grid_size,
+        # ], dtype=jnp.float32)
+        # return observation_fn(params or self.default_params, state)
 
     def is_terminal(self, state: EnvState, params: EnvParams) -> jnp.ndarray:
         """Check whether state is terminal."""
@@ -117,8 +119,8 @@ class SimpleGridWorldGame(environment.Environment):
 
     def observation_space(self, params: EnvParams) -> spaces.Box:
         """Observation space of the environment."""
-        # return spaces.Box(0, 1, (4 * params.grid_size,), dtype=jnp.float32)
-        return spaces.Box(0, 1, (4,), dtype=jnp.float32)
+        return spaces.Box(0, 1, (4 * params.grid_size,), dtype=jnp.float32)
+        # return spaces.Box(0, 1, (4,), dtype=jnp.float32)
 
     def state_space(self, params: EnvParams) -> spaces.Dict:
         """State space of the environment."""

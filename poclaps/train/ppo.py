@@ -191,41 +191,42 @@ def make_train(config, callback: TrainerCallback = None):
 
     callback = callback or TrainerCallback()
 
-    config["NUM_UPDATES"] = (
-        config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
+    config["num_updates"] = (
+        config["total_timesteps"] // config["num_steps"] // config["num_envs"]
     )
-    config["MINIBATCH_SIZE"] = (
-        config["NUM_ENVS"] * config["NUM_STEPS"] // config["NUM_MINIBATCHES"]
+    config["minibatch_size"] = (
+        config["num_envs"] * config["num_steps"] // config["num_minibatches"]
     )
-    env, env_params = environments.make(config["ENV_NAME"])
+    env, env_params = environments.make(config["env_name"],
+                                        **config.get("env_kwargs", {}))
     env = FlattenObservationWrapper(env)
     env = LogWrapper(env)
 
     def linear_schedule(count):
         frac = (
             1.0
-            - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"]))
-            / config["NUM_UPDATES"]
+            - (count // (config["num_minibatches"] * config["update_epochs"]))
+            / config["num_updates"]
         )
-        return config["LR"] * frac
+        return config["learning_rate"] * frac
 
     # INIT NETWORK
     network = ActorCritic(
-        env.action_space(env_params).n, activation=config["ACTIVATION"]
+        env.action_space(env_params).n, activation=config["activation"]
     )
-    rng = jax.random.PRNGKey(config.get("SEED", 0))
+    rng = jax.random.PRNGKey(config.get("seed", 0))
     rng, _rng = jax.random.split(rng)
     init_x = jnp.zeros(env.observation_space(env_params).shape)
     network_params = network.init(_rng, init_x)
-    if config["ANNEAL_LR"]:
+    if config["anneal_lr"]:
         tx = optax.chain(
-            optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
+            optax.clip_by_global_norm(config["max_grad_norm"]),
             optax.adam(learning_rate=linear_schedule, eps=1e-5),
         )
     else:
         tx = optax.chain(
-            optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
-            optax.adam(config["LR"], eps=1e-5),
+            optax.clip_by_global_norm(config["max_grad_norm"]),
+            optax.adam(config["learning_rate"], eps=1e-5),
         )
 
     train_state = TrainState.create(
@@ -236,7 +237,7 @@ def make_train(config, callback: TrainerCallback = None):
 
     # INIT ENV
     rng, _rng = jax.random.split(rng)
-    reset_rng = jax.random.split(_rng, config["NUM_ENVS"])
+    reset_rng = jax.random.split(_rng, config["num_envs"])
     obsv, env_state = jax.vmap(env.reset, in_axes=(0, None))(reset_rng, env_params)
 
     rng, _rng = jax.random.split(rng)
@@ -258,7 +259,7 @@ def make_train(config, callback: TrainerCallback = None):
 
                 # STEP ENV
                 rng, _rng = jax.random.split(rng)
-                rng_step = jax.random.split(_rng, config["NUM_ENVS"])
+                rng_step = jax.random.split(_rng, config["num_envs"])
                 obsv, env_state, reward, done, info = jax.vmap(
                     env.step, in_axes=(0, 0, 0, None)
                 )(rng_step, env_state, action, env_params)
@@ -269,7 +270,7 @@ def make_train(config, callback: TrainerCallback = None):
                 return runner_state, transition
 
             runner_state, traj_batch = jax.lax.scan(
-                _env_step, runner_state, None, config["NUM_STEPS"]
+                _env_step, runner_state, None, config["num_steps"]
             )
 
             # CALCULATE ADVANTAGE
@@ -284,10 +285,10 @@ def make_train(config, callback: TrainerCallback = None):
                         transition.value,
                         transition.reward,
                     )
-                    delta = reward + config["GAMMA"] * next_value * (1 - done) - value
+                    delta = reward + config["gamma"] * next_value * (1 - done) - value
                     gae = (
                         delta
-                        + config["GAMMA"] * config["GAE_LAMBDA"] * (1 - done) * gae
+                        + config["gamma"] * config["gae_lambda"] * (1 - done) * gae
                     )
                     return (gae, value), gae
 
@@ -315,7 +316,7 @@ def make_train(config, callback: TrainerCallback = None):
                         # CALCULATE VALUE LOSS
                         value_pred_clipped = traj_batch.value + (
                             value - traj_batch.value
-                        ).clip(-config["CLIP_EPS"], config["CLIP_EPS"])
+                        ).clip(-config["clip_eps"], config["clip_eps"])
                         value_losses = jnp.square(value - targets)
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
                         value_loss = (
@@ -329,8 +330,8 @@ def make_train(config, callback: TrainerCallback = None):
                         loss_actor2 = (
                             jnp.clip(
                                 ratio,
-                                1.0 - config["CLIP_EPS"],
-                                1.0 + config["CLIP_EPS"],
+                                1.0 - config["clip_eps"],
+                                1.0 + config["clip_eps"],
                             )
                             * gae
                         )
@@ -340,8 +341,8 @@ def make_train(config, callback: TrainerCallback = None):
 
                         total_loss = (
                             loss_actor
-                            + config["VF_COEF"] * value_loss
-                            - config["ENT_COEF"] * entropy
+                            + config["vf_coef"] * value_loss
+                            - config["ent_coef"] * entropy
                         )
                         return total_loss, (value_loss, loss_actor, entropy)
 
@@ -355,9 +356,9 @@ def make_train(config, callback: TrainerCallback = None):
                 train_state, traj_batch, advantages, targets, rng = update_state
                 rng, _rng = jax.random.split(rng)
                 # Batching and Shuffling
-                batch_size = config["MINIBATCH_SIZE"] * config["NUM_MINIBATCHES"]
+                batch_size = config["minibatch_size"] * config["num_minibatches"]
                 assert (
-                    batch_size == config["NUM_STEPS"] * config["NUM_ENVS"]
+                    batch_size == config["num_steps"] * config["num_envs"]
                 ), "batch size must be equal to number of steps * number of envs"
                 permutation = jax.random.permutation(_rng, batch_size)
                 batch = (traj_batch, advantages, targets)
@@ -370,7 +371,7 @@ def make_train(config, callback: TrainerCallback = None):
                 # Mini-batch Updates
                 minibatches = jax.tree_util.tree_map(
                     lambda x: jnp.reshape(
-                        x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
+                        x, [config["num_minibatches"], -1] + list(x.shape[1:])
                     ),
                     shuffled_batch,
                 )
@@ -382,21 +383,11 @@ def make_train(config, callback: TrainerCallback = None):
             # Updating Training State and Metrics:
             update_state = (train_state, traj_batch, advantages, targets, rng)
             update_state, loss_info = jax.lax.scan(
-                _update_epoch, update_state, None, config["UPDATE_EPOCHS"]
+                _update_epoch, update_state, None, config["update_epochs"]
             )
             train_state = update_state[0]
             metric = traj_batch.info
             rng = update_state[-1]
-            
-            # # Debugging mode
-            # if config.get("DEBUG"):
-            #     def callback(info):
-            #         return_values = info["returned_episode_returns"][info["returned_episode"]]
-            #         timesteps = info["timestep"][info["returned_episode"]] * config["NUM_ENVS"]
-            #         for t in range(len(timesteps)):
-            #             print(f"global step={timesteps[t]}, episodic return={return_values[t]}")
-            #     jax.debug.callback(callback, metric)
-
 
             log_metrics = {}
 
@@ -419,7 +410,7 @@ def make_train(config, callback: TrainerCallback = None):
             return runner_state, metric
 
         final_runner_state, metric = jax.lax.scan(
-            _update_step, init_runner_state, None, config["NUM_UPDATES"]
+            _update_step, init_runner_state, None, config["num_updates"]
         )
         return {"runner_state": final_runner_state, "metrics": metric}
 
@@ -428,26 +419,25 @@ def make_train(config, callback: TrainerCallback = None):
 
 if __name__ == "__main__":
     config = {
-        "LR": 2.5e-4,
-        "NUM_ENVS": 4,
-        "NUM_STEPS": 128,
-        "TOTAL_TIMESTEPS": 1e5,
-        "UPDATE_EPOCHS": 4,
-        "NUM_MINIBATCHES": 4,
-        "GAMMA": 0.99,
-        "GAE_LAMBDA": 0.95,
-        "CLIP_EPS": 0.2,
-        "ENT_COEF": 0.01,
-        "VF_COEF": 0.5,
-        "MAX_GRAD_NORM": 0.5,
-        "ACTIVATION": "tanh",
-        "ENV_NAME": "SimpleGridWorld-v0",
-        # "ENV_NAME": "CartPole-v1",
-        "ANNEAL_LR": True,
-        "DEBUG": False,
-        "ENTITY": "drcope",
-        "PROJECT": "ppo-gridworld-example",
-        "WANDB_MODE": "online",
+        "learning_rate": 2.5e-4,
+        "num_envs": 4,
+        "num_steps": 128,
+        "total_timesteps": 1e5,
+        "update_epochs": 4,
+        "num_minibatches": 4,
+        "gamma": 0.99,
+        "gae_lambda": 0.95,
+        "clip_eps": 0.2,
+        "ent_coef": 0.01,
+        "vf_coef": 0.5,
+        "max_grad_norm": 0.5,
+        "activation": "tanh",
+        "env_name": "SimpleGridWorld-v0",
+        # "env_name": "CartPole-v1",
+        "anneal_lr": True,
+        "wandb_entity": "drcope",
+        "wandb_project": "ppo-gridworld-example",
+        "wandb_mode": "online",
     }
     rng = jax.random.PRNGKey(30)
 
@@ -455,5 +445,5 @@ if __name__ == "__main__":
     train = make_train(config, callback)
 
     callback.on_train_begin(config)
-    out = train(rng)
+    out = train(config)
     callback.on_train_end(out["runner_state"])
