@@ -167,17 +167,7 @@ import functools
 
 class ScannedRNN(nn.Module):
     hidden_size: int = 128
-    # def __init__(self, hidden_dim=128):
-    #     super().__init__()
-    #     self.hidden_dim = hidden_dim
 
-    # @functools.partial(
-    #     nn.scan,
-    #     variable_broadcast="params",
-    #     in_axes=0,
-    #     out_axes=0,
-    #     split_rngs={"params": False},
-    # )
     @nn.compact
     def __call__(self, carry, x):
         """Applies the module."""
@@ -187,7 +177,7 @@ class ScannedRNN(nn.Module):
         rnn_state_c = jnp.where(resets[:, :, np.newaxis], init_states_c, rnn_state_c)
         rnn_state_h = jnp.where(resets[:, :, np.newaxis], init_states_h, rnn_state_h)
         rnn_state = (rnn_state_c, rnn_state_h)
-        new_carry, y = nn.OptimizedLSTMCell(self.hidden_size)(rnn_state, x)
+        new_carry, y = nn.OptimizedLSTMCell(self.hidden_size)(rnn_state, ins)
         return new_carry, y
 
     def initialize_carry(self, input_shape):
@@ -195,11 +185,6 @@ class ScannedRNN(nn.Module):
             jax.random.key(0), input_shape
         )
 
-    # def initialize_carry(self, input_shape):
-    #     # Use a dummy key since the default state init fn is just zeros.
-    #     return nn.GRUCell(128).initialize_carry(
-    #         jax.random.PRNGKey(0), input_shape
-    #     )
 
 forward_rrn = ScannedRNN()
 
