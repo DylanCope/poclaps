@@ -25,7 +25,15 @@ def get_best_ckpt_dir(ckpts_dir: Path,
     return comparator(ckpts_dir.iterdir(), key=get_metric)
 
 
-def load_best_ckpt(ckpts_dir: Path,
+def get_best_ckpt_step(ckpts_dir: Path | str,
+                       comparison_method: str = 'max',
+                       metric_name: str = 'mean_total_reward') -> int:
+    ckpts_dir = Path(ckpts_dir)
+    best_ckpt_dir = get_best_ckpt_dir(ckpts_dir, comparison_method, metric_name)
+    return int(best_ckpt_dir.name)
+
+
+def load_best_ckpt(ckpts_dir: Path | str,
                    abstract_pytree: struct.PyTreeNode,
                    comparison_method: str = 'max',
                    metric_name: str = 'mean_total_reward'):
@@ -35,7 +43,7 @@ def load_best_ckpt(ckpts_dir: Path,
     return load_ckpt(ckpts_dir, best_ckpt_step, abstract_pytree)
 
 
-def load_ckpt(ckpts_dir: Path,
+def load_ckpt(ckpts_dir: Path | str,
               step: int,
               abstract_pytree: struct.PyTreeNode):
     ckpts_dir = Path(ckpts_dir)

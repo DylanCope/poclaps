@@ -3,9 +3,12 @@ Based on the PureJAXRL implementation of PPO
 https://github.com/luchris429/purejaxrl/blob/main/purejaxrl/ppo.py
 """
 
+from pathlib import Path
 import jax.experimental
 from poclaps import environments
+from poclaps.train.ckpt_cb import load_ckpt
 from poclaps.train.training_cb import TrainerCallback
+from poclaps.utils.hydra_utils import load_config
 from .wandb_cb import WandbCallback
 
 import jax
@@ -415,6 +418,25 @@ def make_train(config, callback: TrainerCallback = None):
         return {"runner_state": final_runner_state, "metrics": metric}
 
     return runner_state, jax.jit(train)
+
+
+def reload(run_dir: Path | str, ckpt_step: int = 195):
+    run_dir = Path(run_dir)
+    config = load_config(run_dir)
+    init_state, _ = make_train(config)
+
+    ckpt = load_ckpt(run_dir / 'checkpoints', ckpt_step, init_state)
+    train_state, *_ = ckpt
+
+    def policy(obs):
+        return train_state.apply_fn(train_state.params, obs)
+
+    env, env_params = environments.make(config['env_name'],
+                                        **config.get('env_kwargs', {}))
+    env = FlattenObservationWrapper(env)
+    env = LogWrapper(env)
+
+    return config, policy, env, env_params, train_state
 
 
 if __name__ == "__main__":
