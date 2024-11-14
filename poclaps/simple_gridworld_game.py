@@ -138,6 +138,7 @@ class SimpleGridWorldGame(environment.Environment):
         state: EnvState,
         action: Union[int, float, chex.Array],
         params: EnvParams,
+        stop_grad: bool = True,
     ) -> Tuple[chex.Array, EnvState, jnp.ndarray, jnp.ndarray, Dict[Any, Any]]:
         
         UP_DELTA = jnp.array([0, -1])
@@ -167,12 +168,15 @@ class SimpleGridWorldGame(environment.Environment):
 
         reward = done * 2.0 - 1.0
 
+        obs = self.get_obs(state)
+        if stop_grad:
+            obs = jax.lax.stop_gradient(obs)
+            state = jax.lax.stop_gradient(state)
+
+        info = {"discount": self.discount(state, params)}
+
         return (
-            jax.lax.stop_gradient(self.get_obs(state)),
-            jax.lax.stop_gradient(state),
-            jnp.array(reward),
-            done,
-            {"discount": self.discount(state, params)},
+            obs, state, jnp.array(reward), done, info,
         )
 
     def to_string(self, state: EnvState, params: EnvParams) -> str:
