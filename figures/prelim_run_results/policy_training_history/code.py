@@ -9,15 +9,8 @@ import seaborn as sns
 matplotlib.use("pdf")
 
 
-def plot(df):
-    set_plotting_style()
-    ax = sns.lineplot(df, x="step", y="loss")
-    ax.set_xlabel("Training Step")
-    ax.set_ylabel("Loss")
-
-
 def plot_policy_training_history(policy_training_metrics):
-    set_plotting_style()
+    set_plotting_style(font_scale=2)
     _, ax = plt.subplots(1, 1, figsize=(8, 6))
     ax.plot(
         policy_training_metrics["iteration"], policy_training_metrics["mean_reward"]

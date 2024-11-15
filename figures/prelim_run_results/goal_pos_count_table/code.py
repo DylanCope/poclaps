@@ -10,9 +10,9 @@ import seaborn as sns
 matplotlib.use("pdf")
 
 
-def plot_count_table(msg_acc_df):
-    msg_acc_df["Goal X"] = msg_acc_df["Message"] // env_params.grid_size
-    msg_acc_df["Goal Y"] = msg_acc_df["Message"] % env_params.grid_size
+def plot_count_table(msg_acc_df, grid_size=5):
+    msg_acc_df["Goal X"] = msg_acc_df["Message"] // grid_size
+    msg_acc_df["Goal Y"] = msg_acc_df["Message"] % grid_size
 
     count_table = (
         msg_acc_df.groupby(["Goal X", "Goal Y"])["Accuracy"]
@@ -22,7 +22,7 @@ def plot_count_table(msg_acc_df):
     )
     count_table = count_table / count_table.sum().sum()
 
-    set_plotting_style()
+    set_plotting_style(font_scale=2)
 
     ax = sns.heatmap(
         np.float32(count_table.to_numpy()), cmap="viridis", cbar=True, annot=True

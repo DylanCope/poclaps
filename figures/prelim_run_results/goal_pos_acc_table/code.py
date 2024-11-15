@@ -10,9 +10,9 @@ import seaborn as sns
 matplotlib.use("pdf")
 
 
-def plot_acc_table(msg_acc_df):
-    msg_acc_df["Goal X"] = msg_acc_df["Message"] // env_params.grid_size
-    msg_acc_df["Goal Y"] = msg_acc_df["Message"] % env_params.grid_size
+def plot_acc_table(msg_acc_df, grid_size=5):
+    msg_acc_df["Goal X"] = msg_acc_df["Message"] // grid_size
+    msg_acc_df["Goal Y"] = msg_acc_df["Message"] % grid_size
 
     acc_table = (
         msg_acc_df.groupby(["Goal X", "Goal Y"])["Accuracy"]
@@ -21,7 +21,7 @@ def plot_acc_table(msg_acc_df):
         .pivot(index="Goal X", columns="Goal Y", values="Accuracy")
     )
 
-    set_plotting_style()
+    set_plotting_style(font_scale=2)
 
     ax = sns.heatmap(
         np.float32(acc_table.to_numpy()),
