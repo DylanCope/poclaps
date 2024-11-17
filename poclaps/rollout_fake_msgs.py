@@ -1,3 +1,4 @@
+import distrax
 from poclaps.simple_gridworld_game import (
     SimpleGridWorldGame,
     EnvParams as SimpleGridWorldEnvParams,
@@ -48,6 +49,7 @@ def rollout_with_msgs(env: SimpleGridWorldGame,
                       n_envs: int = 4,
                       rng: jnp.array = None,
                       comm_policy_seed: int = 0,
+                      action_sample_temp: float = 1.0,
                       rollout_state=None):
 
     comm_policy = SimpleGridWorldCommPolicy(comm_policy_seed, env_params)
@@ -59,6 +61,10 @@ def rollout_with_msgs(env: SimpleGridWorldGame,
         # SELECT ACTION
         rng, _rng = jax.random.split(rng)
         pi, _ = policy(last_obs)
+
+        if action_sample_temp != 1.0:
+            pi = distrax.Categorical(logits=pi.logits / action_sample_temp)
+
         action = pi.sample(seed=_rng)
         log_prob = pi.log_prob(action)
 
