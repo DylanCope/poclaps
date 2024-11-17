@@ -10,7 +10,7 @@ matplotlib.use("pdf")
 
 
 def plot(df):
-    set_plotting_style()
+    set_plotting_style(font_scale=2)
     ax = sns.lineplot(df, x="step", y="loss")
     ax.set_xlabel("Training Step")
     ax.set_ylabel("Loss")
