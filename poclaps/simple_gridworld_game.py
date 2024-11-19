@@ -47,6 +47,10 @@ class GridAction:
         NOOP, UP, DOWN, LEFT, RIGHT
     ]
 
+    ACTION_NAMES = [
+        "NOOP", "UP", "DOWN", "LEFT", "RIGHT"
+    ]
+
 
 X = 0
 Y = 1

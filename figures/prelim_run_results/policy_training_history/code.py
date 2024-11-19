@@ -9,7 +9,7 @@ matplotlib.use("pdf")
 
 
 def plot_policy_training_history(policy_training_metrics):
-    set_plotting_style(font_scale=2)
+    set_plotting_style(font_scale=1.5)
     _, ax = plt.subplots(1, 1, figsize=(8, 6))
     ax.plot(
         policy_training_metrics["iteration"], policy_training_metrics["mean_reward"]
