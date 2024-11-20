@@ -13,7 +13,10 @@ policy_samples = 25
 
 
 def plot_information_gain(
-    df: pd.DataFrame, wrong_policy_df, stochastic_policy_df, max_gain: float
+    df: pd.DataFrame,
+    wrong_policy_df: pd.DataFrame,
+    stochastic_policy_df: pd.DataFrame,
+    max_gain: float,
 ):
     set_plotting_style(font_scale=2)
     plt.figure(figsize=(10, 6))
@@ -44,7 +47,7 @@ def plot_information_gain(
         label=f"{max_policy_samples+1} Randomly Sampled\nOptimal Policies",
     )
     ax.axhline(max_gain, color="black", linestyle="--", label="Max Gain", alpha=0.5)
-    ax.set_xlabel("Number of Samples")
+    ax.set_xlabel("Number of Demonstrations")
     ax.set_ylabel("Information Gain (bits)")
     ax.legend(loc="upper right", bbox_to_anchor=(1.7, 1))
 
