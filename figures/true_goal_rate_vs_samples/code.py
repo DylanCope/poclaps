@@ -13,7 +13,7 @@ policy_samples = 25
 
 
 def plot_true_goal_rate(stochastic_policy_df):
-    set_plotting_style(font_scale=2)
+    set_plotting_style(font_scale=2.5)
     plt.figure(figsize=(10, 6))
     max_policy_samples = stochastic_policy_df.policy_samples.max()
     ax = sns.lineplot(
@@ -23,7 +23,7 @@ def plot_true_goal_rate(stochastic_policy_df):
         x="k",
         y="true_goal_in_possible",
     )
-    ax.set_xlabel("Number of Samples")
+    ax.set_xlabel("Number of Demonstrations")
     ax.set_ylabel("True Goal In Possible Goals")
 
 
