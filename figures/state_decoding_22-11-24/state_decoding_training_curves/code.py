@@ -10,16 +10,18 @@ matplotlib.use("pdf")
 
 
 def plot_state_decoding_training_curves(df):
-    set_plotting_style(font_scale=1.5)
+    set_plotting_style(font_scale=2)
 
-    _, axs = plt.subplots(1, 2, figsize=(15, 5))
+    _, axs = plt.subplots(1, 2, figsize=(12, 5))
 
     sns.lineplot(df, x="step", y="loss", ax=axs[0])
     axs[0].set_xlabel("Training Step")
     axs[0].set_ylabel("Loss")
     sns.lineplot(df, x="step", y="goal_pred_acc", ax=axs[1])
     axs[1].set_xlabel("Training Step")
-    axs[1].set_ylabel("Goal Prediction Accuracy")
+    axs[1].set_ylabel("Goal Prediction\nAccuracy")
+
+    plt.tight_layout()
 
 
 def reproduce_figure():

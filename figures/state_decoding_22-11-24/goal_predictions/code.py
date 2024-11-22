@@ -18,14 +18,14 @@ def plot(df):
     ax.set_ylabel("Loss")
 
 
-def plot_goal_predictions(acc_df):
+def plot_goal_predictions(acc_df, grid_size=5):
     set_plotting_style(font_scale=1.5)
 
     fig = plt.figure(figsize=(11, 10))
-    gs = gridspec.GridSpec(5, 6, width_ratios=[1, 1, 1, 1, 1, 0.1])
+    gs = gridspec.GridSpec(grid_size, grid_size+1, width_ratios=[1, 1, 1, 1, 1, 0.1])
 
-    for j in range(5):
-        for i in range(5):
+    for j in range(grid_size):
+        for i in range(grid_size):
             true_x, true_y = j, i
 
             df = acc_df[
@@ -33,7 +33,7 @@ def plot_goal_predictions(acc_df):
                 & (acc_df["act_goal_pos_y"] == true_y)
             ]
 
-            preds_table = np.zeros((env_params.grid_size, env_params.grid_size))
+            preds_table = np.zeros((grid_size, grid_size))
 
             for row in df.itertuples():
                 preds_table[row.pred_goal_pos_x, row.pred_goal_pos_y] += 1
@@ -44,8 +44,8 @@ def plot_goal_predictions(acc_df):
             sns.heatmap(
                 preds_table,
                 ax=ax,
-                cbar=i == 4,
-                cbar_ax=None if i != 4 else plt.subplot(gs[j, 5]),
+                cbar=i == grid_size-1,
+                cbar_ax=None if i != grid_size-1 else plt.subplot(gs[j, grid_size]),
                 vmin=0,
                 vmax=1,
                 # cbar_kws={'label': 'Accuracy'},
@@ -79,7 +79,7 @@ def plot_goal_predictions(acc_df):
                 [true_y + 1, true_y + 1], [true_x, true_x + 1], "r", linewidth=width
             )
 
-        cbar_ax = plt.subplot(gs[j, 5])
+        cbar_ax = plt.subplot(gs[j, grid_size])
         cbar_ax.set_aspect(10)  # Adjust this value to fine-tune
 
     plt.tight_layout()
