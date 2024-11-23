@@ -27,14 +27,14 @@ def reproduce_figure():
     data = [
         pd.read_csv(csv_path)
         for csv_path in sorted(
-            Path(
-                "figures/state_decoding_22-11-24-2/state_decoding_training_curves"
-            ).glob("data_*.csv")
+            Path("figures/state_decoding_23-11-24/state_decoding_training_curves").glob(
+                "data_*.csv"
+            )
         )
     ]
     plot_state_decoding_training_curves(*data)
     plt.savefig(
-        "figures/state_decoding_22-11-24-2/state_decoding_training_curves/state_decoding_training_curves.pdf",
+        "figures/state_decoding_23-11-24/state_decoding_training_curves/state_decoding_training_curves.pdf",
         bbox_inches="tight",
         dpi=1000,
     )
