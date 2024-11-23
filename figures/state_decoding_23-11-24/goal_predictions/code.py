@@ -85,14 +85,12 @@ def reproduce_figure():
     data = [
         pd.read_csv(csv_path)
         for csv_path in sorted(
-            Path("figures/state_decoding_22-11-24-2/goal_predictions").glob(
-                "data_*.csv"
-            )
+            Path("figures/state_decoding_23-11-24/goal_predictions").glob("data_*.csv")
         )
     ]
     plot_goal_predictions(*data)
     plt.savefig(
-        "figures/state_decoding_22-11-24-2/goal_predictions/goal_predictions.pdf",
+        "figures/state_decoding_23-11-24/goal_predictions/goal_predictions.pdf",
         bbox_inches="tight",
         dpi=1000,
     )
