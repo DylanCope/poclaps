@@ -12,7 +12,7 @@ matplotlib.use("pdf")
 def plot_policy_location_heatmap(agent_pos_df, grid_size, n_samples):
     agent_pos_df["idx"] = agent_pos_df["X"] * grid_size + agent_pos_df["Y"]
 
-    set_plotting_style(font_scale=2)
+    set_plotting_style(font_scale=3)
 
     _, axs = plt.subplots(1, 3, figsize=(30, 8))
     for i, temp in enumerate([1.0, 0.1, 0.01]):
