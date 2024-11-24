@@ -18,7 +18,7 @@ def plot(df):
     ax.set_ylabel("Loss")
 
 
-def plot_goal_predictions(acc_df):
+def plot_goal_predictions(acc_df, grid_size=5):
     set_plotting_style(font_scale=1.5)
 
     plt.figure(figsize=(11, 10))
@@ -33,7 +33,7 @@ def plot_goal_predictions(acc_df):
                 & (acc_df["act_goal_pos_y"] == true_y)
             ]
 
-            preds_table = np.zeros((env_params.grid_size, env_params.grid_size))
+            preds_table = np.zeros((grid_size, grid_size))
 
             for row in df.itertuples():
                 preds_table[row.pred_goal_pos_x, row.pred_goal_pos_y] += 1
